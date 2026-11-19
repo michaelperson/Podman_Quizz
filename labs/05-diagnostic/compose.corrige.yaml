@@ -1,0 +1,83 @@
+# Lab 05 - Diagnostic : version CORRIGÉE de compose.yaml (réservée au formateur).
+#
+#   podman compose -f compose.corrige.yaml up -d --build
+#
+# Les quatre pannes sont signalées par « PANNE n ». Elles sont indépendantes :
+# chacune se corrige sans toucher aux autres. Explications détaillées dans
+# SOLUTIONS.md, à la racine de la branche solutions.
+
+name: quiz-diag
+
+services:
+  front:
+    image: docker.io/library/nginx:1.30.7-alpine3.24
+    ports:
+      # PANNE 1 (port) - était "8080:80".
+      # nginx écoute sur 8080 dans le conteneur (voir front/nginx/default.conf.template) ;
+      # rien n'écoute sur 80. Symptôme : le conteneur est Up, mais
+      # curl http://localhost:8080 renvoie « connexion réinitialisée » / « réponse vide ».
+      # Diagnostic : podman port <front>, puis podman exec <front> nginx -T | grep listen.
+      - "8080:8080"
+    environment:
+      API_HOST: api
+      API_PORT: "8000"
+      NGINX_ENTRYPOINT_LOCAL_RESOLVERS: "1"
+    volumes:
+      - ../../front/public:/usr/share/nginx/html:ro,Z
+      - ../../front/nginx:/etc/nginx/templates:ro,Z
+    depends_on:
+      - api
+
+  api:
+    build:
+      context: ../../api
+      dockerfile: ../labs/05-diagnostic/Containerfile.api
+    image: localhost/quiz-api:diag
+    environment:
+      # PANNE 2 (DNS / nom de service) - était "postgres".
+      # Sur le réseau de compose, le nom DNS d'un service est le nom de sa clé
+      # sous « services: », ici « db ». Symptôme : l'API reste Up une à deux
+      # minutes en journalisant « failed to resolve host 'postgres' », puis s'arrête.
+      # Diagnostic : podman logs <api> ; podman exec <api> python -c
+      # "import socket; print(socket.gethostbyname('db'))".
+      DB_HOST: db
+      DB_NAME: quiz
+      DB_USER: quiz
+      DB_PASSWORD: diagnostic
+      REDIS_HOST: redis
+    depends_on:
+      - db
+      - redis
+
+  db:
+    image: docker.io/library/postgres:18.7-trixie
+    environment:
+      POSTGRES_DB: quiz
+      POSTGRES_USER: quiz
+      POSTGRES_PASSWORD: diagnostic
+    volumes:
+      # PANNE 3 (volume) - était "diag-pgdata:/var/lib/postgresql/data".
+      # Depuis PostgreSQL 18, l'image officielle stocke ses données dans
+      # /var/lib/postgresql/18/docker et attend un montage sur /var/lib/postgresql.
+      # Un montage sur .../data est refusé au démarrage. Symptôme : db « Exited (1) »
+      # immédiatement ; podman logs <db> explique le changement.
+      - diag-pgdata:/var/lib/postgresql
+
+  redis:
+    image: docker.io/library/redis:8.10.3-alpine3.23
+    command: ["redis-server", "--appendonly", "yes"]
+    # PANNE 4 (permissions, UID en rootless) - la ligne user: "1000:1000" est supprimée.
+    # Le volume diag-redis est initialisé avec le contenu de /data de l'image,
+    # qui appartient à l'utilisateur redis (UID 999 dans le conteneur). Forcer
+    # l'UID 1000 « pour coller à l'hôte » est un contresens : les UID du
+    # conteneur ne sont pas ceux de l'hôte (espace de noms utilisateur).
+    # Symptôme : redis « Exited (1) », journal « Can't open or create
+    # append-only dir appendonlydir: Permission denied ».
+    # Diagnostic : podman logs <redis> ; podman inspect --format '{{.Config.User}}' ;
+    # podman run --rm -v quiz-diag_diag-redis:/data docker.io/library/redis:8.10.3-alpine3.23 ls -ln /data
+    volumes:
+      - diag-redis:/data
+
+volumes:
+  diag-pgdata:
+  diag-redis:
