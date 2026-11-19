@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quiz conteneurs</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Quiz <span>conteneurs</span></h1>
+    <p>Dix questions pour tester votre culture Podman.</p>
+  </header>
+
+  <main>
+    <!-- Écran 1 : choix du pseudo -->
+    <section id="ecran-accueil" class="carte">
+      <form id="form-pseudo">
+        <label for="pseudo">Votre pseudo</label>
+        <input id="pseudo" name="pseudo" maxlength="30" required autocomplete="off" placeholder="ex. : rootless_ninja">
+        <button type="submit">Commencer</button>
+      </form>
+      <p id="erreur-accueil" class="erreur" hidden></p>
+    </section>
+
+    <!-- Écran 2 : une question à la fois -->
+    <section id="ecran-question" class="carte" hidden>
+      <p class="progression" id="progression"></p>
+      <h2 id="texte-question"></h2>
+      <div id="choix" class="choix"></div>
+    </section>
+
+    <!-- Écran 3 : résultat et correction -->
+    <section id="ecran-resultat" class="carte" hidden>
+      <h2 id="score"></h2>
+      <ol id="correction" class="correction"></ol>
+      <button id="rejouer" type="button">Rejouer</button>
+    </section>
+
+    <!-- Classement, toujours visible -->
+    <aside class="carte">
+      <h2>Classement</h2>
+      <ol id="classement" class="classement"></ol>
+      <p id="source-classement" class="discret"></p>
+    </aside>
+  </main>
+
+  <footer>Application fil rouge de la formation « Podman pour développeurs »</footer>
+  <script src="app.js"></script>
+</body>
+</html>

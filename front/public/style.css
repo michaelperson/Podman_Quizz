@@ -1,0 +1,88 @@
+:root {
+  --fond: #f4f1ea;
+  --carte: #ffffff;
+  --texte: #1f2328;
+  --discret: #5f6670;
+  --accent: #892ca0;      /* violet, clin d'œil au phoque de Podman */
+  --accent-clair: #f1e4f5;
+  --ok: #1a7f37;
+  --ko: #c0392b;
+  --bord: #ddd6c8;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--fond);
+  color: var(--texte);
+  line-height: 1.5;
+}
+
+header, footer { text-align: center; padding: 1.5rem 1rem; }
+header h1 { margin: 0; font-size: 2rem; letter-spacing: -0.02em; }
+header h1 span { color: var(--accent); }
+header p, footer, .discret { color: var(--discret); }
+footer { font-size: 0.85rem; }
+
+main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 1rem;
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+@media (max-width: 720px) { main { grid-template-columns: 1fr; } }
+
+.carte {
+  background: var(--carte);
+  border: 1px solid var(--bord);
+  border-radius: 12px;
+  padding: 1.25rem;
+}
+.carte h2 { margin-top: 0; font-size: 1.2rem; }
+
+label { display: block; font-weight: 600; margin-bottom: 0.4rem; }
+input {
+  width: 100%;
+  padding: 0.6rem;
+  font-size: 1rem;
+  border: 1px solid var(--bord);
+  border-radius: 8px;
+  margin-bottom: 0.8rem;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border: 0;
+  border-radius: 8px;
+  padding: 0.6rem 1.1rem;
+  background: var(--accent);
+  color: #fff;
+}
+button:hover { filter: brightness(1.1); }
+
+.progression { color: var(--discret); margin: 0 0 0.5rem; }
+.choix { display: grid; gap: 0.5rem; }
+.choix button {
+  text-align: left;
+  background: var(--accent-clair);
+  color: var(--texte);
+  border: 1px solid transparent;
+}
+.choix button:hover { border-color: var(--accent); filter: none; }
+
+.correction li { margin-bottom: 0.8rem; }
+.correction .ok { color: var(--ok); font-weight: 600; }
+.correction .ko { color: var(--ko); font-weight: 600; }
+.correction small { display: block; color: var(--discret); }
+
+.classement { padding-left: 1.4rem; margin: 0; }
+.classement li { padding: 0.2rem 0; }
+.classement b { float: right; }
+
+.erreur { color: var(--ko); }

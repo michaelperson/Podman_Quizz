@@ -1,0 +1,51 @@
+# Configuration nginx du front (template).
+#
+# Les images nginx officielles (nginx et nginxinc/nginx-unprivileged) passent au
+# démarrage chaque fichier /etc/nginx/templates/*.template dans envsubst et
+# écrivent le résultat dans /etc/nginx/conf.d/. Seules les variables définies
+# dans l'environnement sont remplacées : $uri, $host, etc. restent intactes.
+#
+# Variables attendues :
+#   API_HOST   nom (DNS) du service API, par exemple « api »
+#   API_PORT   port de l'API, normalement 8000
+#   NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1
+#              demande à l'image de remplir NGINX_LOCAL_RESOLVERS avec le
+#              serveur DNS du conteneur (lu dans /etc/resolv.conf). Avec Podman,
+#              c'est aardvark-dns, le DNS du réseau.
+
+server {
+    # 8080 et non 80 : un nginx exécuté sans root (USER non-root dans l'image)
+    # ne peut pas ouvrir un port inférieur à 1024.
+    listen 8080;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Sonde pour le healthcheck du front lui-même
+    location = /nginx-health {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    # Tout ce qui commence par /api est relayé à l'API.
+    location /api/ {
+        # Le nom de l'API est résolu à chaque requête (variable + resolver) et
+        # non une seule fois au démarrage : nginx démarre même si l'API n'est
+        # pas encore là, et suit l'API si son conteneur est recréé avec une
+        # autre adresse IP.
+        resolver ${NGINX_LOCAL_RESOLVERS} valid=10s;
+        set $api_upstream http://${API_HOST}:${API_PORT};
+        proxy_pass $api_upstream;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_connect_timeout 3s;
+    }
+}
