@@ -1,0 +1,7 @@
+# Fichiers exclus du contexte de build (équivalent de .dockerignore)
+__pycache__/
+*.pyc
+.venv/
+venv/
+Containerfile*
+.containerignore

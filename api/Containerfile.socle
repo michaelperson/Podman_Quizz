@@ -1,0 +1,26 @@
+# Palier SOCLE : un Containerfile simple, qui fonctionne.
+# Volontairement naïf : image de base complète (~1 Go), tout le dossier copié,
+# exécution en root. C'est le point de départ des paliers suivants et du scan
+# de vulnérabilités (lab 08).
+#
+#   podman build -t quiz-api:socle -f Containerfile.socle .
+
+# Nom complet (docker.io/library/...) : Podman n'a pas de registre implicite,
+# un nom court peut déclencher une question ou une erreur selon la configuration.
+FROM docker.io/library/python:3.14.10
+
+WORKDIR /app
+
+# On copie d'abord les dépendances : tant que requirements.txt ne change pas,
+# la couche « pip install » est reprise du cache au build suivant.
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+# Documentation uniquement : EXPOSE ne publie rien, c'est -p qui publie.
+EXPOSE 8000
+
+# Forme « exec » (tableau JSON) : uvicorn est le PID 1 et reçoit SIGTERM
+# directement à l'arrêt du conteneur.
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

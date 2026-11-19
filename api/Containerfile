@@ -1,0 +1,59 @@
+# Palier BONUS (image finale) : multi-stage, image minimale (Alpine),
+# utilisateur non-root, pas de pip dans l'image d'exécution, healthcheck.
+#
+#   podman build -t quiz-api:1.0 .
+#
+# ATTENTION : au format OCI (format par défaut de « podman build »),
+# l'instruction HEALTHCHECK ci-dessous est IGNORÉE (avec un avertissement).
+# Pour la conserver dans l'image :
+#   podman build --format docker -t quiz-api:1.0 .
+# (ou BUILDAH_FORMAT=docker). Sinon, déclarer le healthcheck au lancement
+# (podman run --health-cmd ...) ou dans compose.yaml.
+
+ARG PYTHON_IMAGE=docker.io/library/python:3.14.10-alpine3.24
+
+# --- Étape 1 : dépendances ---------------------------------------------------
+FROM ${PYTHON_IMAGE} AS build
+
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
+
+RUN python -m venv /opt/venv
+ENV PATH=/opt/venv/bin:$PATH
+
+COPY requirements.txt .
+# Les roues (wheels) musllinux de psycopg-binary et pydantic-core évitent
+# toute compilation : pas besoin de gcc dans l'étape de build.
+RUN pip install -r requirements.txt \
+ && pip uninstall -y pip    # pip n'a rien à faire dans l'image finale
+
+# --- Étape 2 : exécution ----------------------------------------------------
+FROM ${PYTHON_IMAGE}
+
+# Retire pip (et sa roue embarquée par ensurepip) de l'image de base :
+# moins de code = moins de vulnérabilités potentielles.
+RUN python -m pip uninstall -y pip \
+ && rm -rf /usr/local/lib/python3.14/ensurepip \
+ && addgroup -S -g 10001 quiz \
+ && adduser -S -D -H -u 10001 -G quiz quiz
+
+ENV PATH=/opt/venv/bin:$PATH \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+COPY --from=build /opt/venv /opt/venv
+
+WORKDIR /app
+# Le code appartient à root et n'est donc pas modifiable par l'utilisateur
+# qui exécute l'application.
+COPY main.py config.py healthcheck.py questions.json ./
+
+# UID numérique : Kubernetes (runAsNonRoot) peut vérifier qu'il n'est pas 0.
+USER 10001:10001
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=3 \
+  CMD ["python", "healthcheck.py"]
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

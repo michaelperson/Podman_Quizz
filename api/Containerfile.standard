@@ -1,0 +1,33 @@
+# Palier STANDARD : build multi-stage sur une image « slim ».
+#
+#   podman build -t quiz-api:standard -f Containerfile.standard .
+
+# --- Étape 1 : installation des dépendances dans un environnement virtuel ---
+FROM docker.io/library/python:3.14.10-slim-trixie AS build
+
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
+
+# Un venv dans /opt/venv : tout ce qu'il faut à l'exécution est dans un seul
+# dossier, facile à copier dans l'étape suivante.
+RUN python -m venv /opt/venv
+ENV PATH=/opt/venv/bin:$PATH
+
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+# --- Étape 2 : image d'exécution, sans cache pip ni fichiers de build ---------
+FROM docker.io/library/python:3.14.10-slim-trixie
+
+ENV PATH=/opt/venv/bin:$PATH \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+COPY --from=build /opt/venv /opt/venv
+
+WORKDIR /app
+# On ne copie que le code utile (voir aussi .containerignore)
+COPY main.py config.py healthcheck.py questions.json ./
+
+EXPOSE 8000
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
