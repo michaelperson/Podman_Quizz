@@ -1,0 +1,6 @@
+# Dépendances directes. requirements.txt (épinglé, avec les dépendances
+# transitives) est généré à partir de ce fichier.
+fastapi==0.162.0
+uvicorn==0.54.0
+psycopg[binary]==3.3.8
+redis==8.1.0

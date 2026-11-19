@@ -1,0 +1,107 @@
+[
+  {
+    "texte": "Que signifie « rootless » pour Podman ?",
+    "choix": [
+      "Les conteneurs tournent sans droits administrateur sur l'hôte",
+      "L'image n'a pas de système de fichiers racine",
+      "Le conteneur n'a pas d'utilisateur root à l'intérieur",
+      "Podman fonctionne sans noyau Linux"
+    ],
+    "bonne_reponse": 0,
+    "explication": "En rootless, Podman et ses conteneurs s'exécutent avec les droits de votre utilisateur. Le « root » du conteneur est mappé sur votre UID grâce aux user namespaces."
+  },
+  {
+    "texte": "Quel est le nom conventionnel du fichier qui décrit la construction d'une image avec Podman ?",
+    "choix": ["Podfile", "Containerfile", "image.yaml", "Buildfile"],
+    "bonne_reponse": 1,
+    "explication": "Podman (via Buildah) cherche un Containerfile, puis un Dockerfile. La syntaxe est la même."
+  },
+  {
+    "texte": "Qu'est-ce qu'un pod dans Podman ?",
+    "choix": [
+      "Une image compressée",
+      "Une machine virtuelle légère",
+      "Un groupe de conteneurs qui partagent le même espace réseau",
+      "Un registre d'images local"
+    ],
+    "bonne_reponse": 2,
+    "explication": "Comme dans Kubernetes, les conteneurs d'un pod partagent le réseau : ils se joignent via localhost."
+  },
+  {
+    "texte": "À quoi sert un build multi-stage ?",
+    "choix": [
+      "À construire plusieurs images en parallèle",
+      "À ne garder dans l'image finale que ce qui est nécessaire à l'exécution",
+      "À publier l'image sur plusieurs registres",
+      "À lancer plusieurs processus dans le conteneur"
+    ],
+    "bonne_reponse": 1,
+    "explication": "Les outils de compilation restent dans une étape intermédiaire ; l'image finale est plus petite et expose moins de vulnérabilités."
+  },
+  {
+    "texte": "Où faut-il stocker les données d'une base PostgreSQL pour qu'elles survivent à la suppression du conteneur ?",
+    "choix": [
+      "Dans la couche inscriptible du conteneur",
+      "Dans une variable d'environnement",
+      "Dans un volume",
+      "Dans l'image"
+    ],
+    "bonne_reponse": 2,
+    "explication": "La couche inscriptible disparaît avec le conteneur. Un volume (ou un bind mount) vit indépendamment de lui."
+  },
+  {
+    "texte": "Quelle commande produit un manifeste Kubernetes à partir d'un pod existant ?",
+    "choix": [
+      "podman kube generate",
+      "podman export",
+      "podman compose convert",
+      "podman pod save"
+    ],
+    "bonne_reponse": 0,
+    "explication": "podman kube generate écrit le YAML ; podman kube play le rejoue."
+  },
+  {
+    "texte": "En mode rootless, pourquoi « podman run -p 80:8080 ... » échoue-t-il en général sous Linux ?",
+    "choix": [
+      "Le port 8080 est réservé à Podman",
+      "Un utilisateur non privilégié ne peut pas ouvrir un port inférieur à 1024 sur l'hôte",
+      "Il faut toujours publier le même port des deux côtés",
+      "Le port 80 est bloqué dans tous les conteneurs"
+    ],
+    "bonne_reponse": 1,
+    "explication": "Les ports inférieurs à 1024 sont privilégiés (net.ipv4.ip_unprivileged_port_start). On publie donc par exemple 8080:8080."
+  },
+  {
+    "texte": "Deux conteneurs sont sur le même réseau Podman créé par l'utilisateur. Comment le premier joint-il le second ?",
+    "choix": [
+      "Par son nom, grâce au DNS interne du réseau",
+      "Uniquement par son adresse IP",
+      "Par localhost",
+      "Ce n'est pas possible sans pod"
+    ],
+    "bonne_reponse": 0,
+    "explication": "Les réseaux créés avec podman network create ont un DNS (aardvark-dns) qui résout le nom des conteneurs."
+  },
+  {
+    "texte": "Que permet Quadlet ?",
+    "choix": [
+      "De scanner une image",
+      "De faire gérer des conteneurs par systemd à partir de fichiers .container, .pod ou .kube",
+      "De convertir un compose.yaml en Containerfile",
+      "D'exécuter quatre conteneurs à la fois"
+    ],
+    "bonne_reponse": 1,
+    "explication": "Quadlet remplace podman generate systemd, déprécié : on décrit le conteneur, systemd s'occupe du reste."
+  },
+  {
+    "texte": "Avec « podman build » au format OCI par défaut, que devient l'instruction HEALTHCHECK du Containerfile ?",
+    "choix": [
+      "Elle est exécutée pendant le build",
+      "Elle est ignorée : il faut --format docker, ou déclarer le healthcheck au lancement",
+      "Elle est convertie en sonde Kubernetes",
+      "Elle provoque une erreur de build"
+    ],
+    "bonne_reponse": 1,
+    "explication": "Le format d'image OCI ne connaît pas HEALTHCHECK. Podman avertit et l'ignore, sauf avec --format docker."
+  }
+]
