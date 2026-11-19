@@ -1,0 +1,28 @@
+# API. L'image doit exister localement : podman build -t quiz-api:1.0 api/
+# Dans un pod, la base et Redis sont joignables sur 127.0.0.1.
+[Unit]
+Description=Quiz conteneurs - API
+Requires=quiz-db.service quiz-redis.service
+After=quiz-db.service quiz-redis.service
+
+[Container]
+ContainerName=quiz-api
+Image=localhost/quiz-api:1.0
+Pod=quiz.pod
+Environment=DB_HOST=127.0.0.1 REDIS_HOST=127.0.0.1
+Environment=DB_PASSWORD_FILE=/run/secrets/quiz-db-password
+Secret=quiz-db-password
+HealthCmd=python healthcheck.py
+HealthInterval=10s
+HealthStartPeriod=20s
+Notify=healthy
+# Durcissement à l'exécution
+ReadOnly=true
+DropCapability=ALL
+NoNewPrivileges=true
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

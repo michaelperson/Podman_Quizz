@@ -1,0 +1,25 @@
+# PostgreSQL. Le mot de passe vient du secret Podman « quiz-db-password » :
+#   printf '%s' 'un-mot-de-passe' | podman secret create quiz-db-password -
+[Unit]
+Description=Quiz conteneurs - PostgreSQL
+
+[Container]
+ContainerName=quiz-db
+Image=docker.io/library/postgres:18.7-trixie
+Pod=quiz.pod
+Volume=quiz-db.volume:/var/lib/postgresql
+Environment=POSTGRES_DB=quiz POSTGRES_USER=quiz
+Environment=POSTGRES_PASSWORD_FILE=/run/secrets/quiz-db-password
+# Monté par défaut dans /run/secrets/<nom du secret>
+Secret=quiz-db-password
+HealthCmd=pg_isready -U quiz -d quiz
+HealthInterval=5s
+HealthRetries=10
+# systemd considère le service démarré quand le healthcheck est vert
+Notify=healthy
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

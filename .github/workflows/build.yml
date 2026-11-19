@@ -1,0 +1,82 @@
+# Solution du bonus CI : construit les images de l'API et du front avec Podman,
+# les scanne avec Trivy et les publie sur ghcr.io.
+#
+# Déclenchement : push sur main ou tag v*, et pull requests (build et scan
+# seulement, pas de publication). Sur cette branche « solutions », le workflow
+# ne se déclenche donc pas : il est fait pour être recopié sur main.
+name: Build et publication des images
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+# Droits minimaux du jeton GITHUB_TOKEN
+permissions:
+  contents: read
+  packages: write
+
+env:
+  # Trivy épinglé par tag ET digest : un tag peut être réécrit (incident de mars 2026,
+  # avis GHSA-69fq-xp46-6x23), un digest non.
+  TRIVY_IMAGE: docker.io/aquasec/trivy:0.76.2@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb
+
+jobs:
+  image:
+    runs-on: ubuntu-24.04   # Podman y est préinstallé
+    strategy:
+      matrix:
+        composant: [api, front]
+    steps:
+      # Action épinglée par SHA de commit (v7.0.1), pas par tag déplaçable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Nom et tags de l'image
+        env:
+          COMPOSANT: ${{ matrix.composant }}
+        run: |
+          # Les noms d'images doivent être en minuscules
+          depot="${GITHUB_REPOSITORY,,}"
+          echo "IMAGE=ghcr.io/${depot}-${COMPOSANT}" >> "$GITHUB_ENV"
+          echo "TAG=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+
+      - name: Build (format docker pour conserver le HEALTHCHECK)
+        env:
+          COMPOSANT: ${{ matrix.composant }}
+        run: |
+          podman --version
+          podman build --format docker \
+            --label "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            -t "${IMAGE}:${TAG}" "${COMPOSANT}"
+          podman images
+
+      - name: Scan Trivy (échoue s'il reste une CVE critique corrigeable)
+        run: |
+          podman save -o image.tar "${IMAGE}:${TAG}"
+          podman run --rm -v "${PWD}/image.tar:/scan/image.tar:ro" "${TRIVY_IMAGE}" \
+            image --severity CRITICAL --ignore-unfixed --exit-code 1 --input /scan/image.tar
+          rm -f image.tar
+
+      - name: Publication sur ghcr.io
+        if: github.event_name != 'pull_request'
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY_USER: ${{ github.actor }}
+        run: |
+          printf '%s' "${REGISTRY_TOKEN}" | podman login ghcr.io -u "${REGISTRY_USER}" --password-stdin
+          podman push "${IMAGE}:${TAG}"
+          # « latest » seulement depuis main, et le numéro de version pour un tag v*
+          if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+            podman tag "${IMAGE}:${TAG}" "${IMAGE}:latest"
+            podman push "${IMAGE}:latest"
+          fi
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            podman tag "${IMAGE}:${TAG}" "${IMAGE}:${GITHUB_REF_NAME}"
+            podman push "${IMAGE}:${GITHUB_REF_NAME}"
+          fi
+          podman logout ghcr.io

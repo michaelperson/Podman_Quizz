@@ -1,0 +1,12 @@
+# Pod « quiz » : tous les conteneurs partagent le même réseau (localhost).
+# Seul le front est exposé, sur le port 8080 de l'hôte.
+# Unité générée : quiz-pod.service
+[Unit]
+Description=Quiz conteneurs - pod
+
+[Pod]
+PodName=quiz
+PublishPort=8080:8080
+
+[Install]
+WantedBy=default.target

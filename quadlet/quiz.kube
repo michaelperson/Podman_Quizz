@@ -1,0 +1,15 @@
+# Variante « tout-en-un » : rejoue le manifeste du lab 04 avec systemd.
+# À utiliser À LA PLACE des fichiers .pod/.container (pas en plus : même nom de pod).
+# Copier aussi kube/quiz-pod.yaml à côté de ce fichier. Le port publié (8000)
+# vient du hostPort du manifeste. Unité : quiz.service
+[Unit]
+Description=Quiz conteneurs - pod depuis un manifeste Kubernetes
+
+[Kube]
+Yaml=quiz-pod.yaml
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

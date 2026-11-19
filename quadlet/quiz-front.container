@@ -1,0 +1,20 @@
+# Front nginx. L'image doit exister localement : podman build -t quiz-front:1.0 front/
+[Unit]
+Description=Quiz conteneurs - front
+Requires=quiz-api.service
+After=quiz-api.service
+
+[Container]
+ContainerName=quiz-front
+Image=localhost/quiz-front:1.0
+Pod=quiz.pod
+# Dans le pod, l'API est sur localhost
+Environment=API_HOST=127.0.0.1 API_PORT=8000
+HealthCmd=wget -q --spider http://127.0.0.1:8080/nginx-health
+HealthInterval=10s
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

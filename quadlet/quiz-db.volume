@@ -1,0 +1,3 @@
+# Volume nommé pour les données PostgreSQL (unité : quiz-db-volume.service)
+[Volume]
+VolumeName=quiz-pgdata

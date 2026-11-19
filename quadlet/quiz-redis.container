@@ -1,0 +1,16 @@
+[Unit]
+Description=Quiz conteneurs - Redis
+
+[Container]
+ContainerName=quiz-redis
+Image=docker.io/library/redis:8.10.3-alpine3.23
+Pod=quiz.pod
+HealthCmd=redis-cli ping
+HealthInterval=5s
+Notify=healthy
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target
