@@ -1,0 +1,114 @@
+# Application « Quiz » complète : nginx (front) + API FastAPI + PostgreSQL + Redis.
+#
+#   1. créer le secret (une fois) :
+#        openssl rand -hex 16 > secrets/db_password.txt
+#      (ou n'importe quel mot de passe dans ce fichier, qui n'est pas versionné)
+#   2. podman compose up -d --build
+#   3. http://localhost:8080
+#
+# Les variables ${...} viennent du fichier .env (à côté de ce fichier) ;
+# la valeur après « :- » s'applique si la variable n'est pas définie.
+
+name: quiz
+
+services:
+  front:
+    build:
+      context: ./front
+      dockerfile: Containerfile
+    image: localhost/quiz-front:1.0
+    ports:
+      # Port hôte >= 1024 : publiable sans droits root (rootless)
+      - "${FRONT_PORT:-8080}:8080"
+    environment:
+      API_HOST: api        # nom du service ci-dessous = nom DNS sur le réseau
+      API_PORT: "8000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/nginx-health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    # Durcissement (lab 08) : nginx tourne en UID 101 sur 8080, il n'a besoin
+    # d'aucune capacité Linux.
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges"]
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Containerfile
+    image: localhost/quiz-api:1.0
+    environment:
+      DB_HOST: db
+      DB_NAME: ${DB_NAME:-quiz}
+      DB_USER: ${DB_USER:-quiz}
+      # Le mot de passe n'est jamais dans une variable : on donne le chemin du secret
+      DB_PASSWORD_FILE: /run/secrets/db_password
+      REDIS_HOST: redis
+      # FORCE_UNHEALTHY=1 dans .env (ou en ligne de commande) pour le lab 07
+      FORCE_UNHEALTHY: ${FORCE_UNHEALTHY:-0}
+    secrets:
+      - db_password
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Déclaré ici, le healthcheck fonctionne quel que soit le format de l'image
+    # (le HEALTHCHECK du Containerfile est ignoré au format OCI).
+    healthcheck:
+      test: ["CMD", "python", "healthcheck.py"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+    # Durcissement (lab 08) : système de fichiers en lecture seule (seul /tmp
+    # est inscriptible, en mémoire), aucune capacité Linux, pas d'élévation.
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges"]
+    restart: unless-stopped
+
+  db:
+    image: docker.io/library/postgres:${POSTGRES_TAG:-18.7-trixie}
+    environment:
+      POSTGRES_DB: ${DB_NAME:-quiz}
+      POSTGRES_USER: ${DB_USER:-quiz}
+      # Les images officielles savent lire les variables *_FILE
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_password
+    volumes:
+      # PostgreSQL 18 : on monte /var/lib/postgresql (et non plus .../data)
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      # $$ : le $ est transmis tel quel au shell du conteneur (pas interprété par compose)
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  redis:
+    image: docker.io/library/redis:${REDIS_TAG:-8.10.3-alpine3.23}
+    # Pas de volume : si Redis redémarre à vide, l'API recalcule le classement
+    # depuis PostgreSQL au démarrage.
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt

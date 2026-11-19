@@ -1,0 +1,38 @@
+# Image du front : fichiers statiques servis par nginx, sans root.
+#
+#   podman build -t quiz-front:1.0 .
+#
+# Pourquoi l'image officielle « nginx » et pas « nginxinc/nginx-unprivileged » ?
+# Au 2026-11-20, nginx-unprivileged n'est publiée qu'en 1.30.6, qui a 5 CVE
+# critiques corrigées en 1.30.7 (scan Trivy, lab 08). On part donc de l'image
+# officielle 1.30.7 et on la rend non-root nous-mêmes : c'est exactement ce que
+# fait nginx-unprivileged. Dès que nginx-unprivileged:1.30.7 (ou plus) existe,
+# on peut revenir à elle et supprimer le bloc RUN ci-dessous.
+FROM docker.io/library/nginx:1.30.7-alpine3.24
+
+# Rendre nginx exécutable par l'utilisateur « nginx » (UID 101) :
+#  - le fichier PID va dans /tmp (et non /run, réservé à root) ;
+#  - l'utilisateur nginx doit pouvoir écrire son cache et /etc/nginx/conf.d,
+#    où l'entrypoint génère la configuration à partir du template ;
+#  - la directive « user » ne sert qu'à un nginx lancé en root : on la retire.
+RUN sed -i -e 's,^pid .*,pid /tmp/nginx.pid;,' -e '/^user /d' /etc/nginx/nginx.conf \
+ && rm -f /etc/nginx/conf.d/default.conf \
+ && chown -R nginx:nginx /var/cache/nginx /etc/nginx/conf.d
+
+# Valeurs par défaut, modifiables au lancement (-e API_HOST=...)
+ENV API_HOST=api \
+    API_PORT=8000 \
+    NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1
+
+# Au démarrage, l'image transforme ce template (envsubst) en
+# /etc/nginx/conf.d/default.conf.
+COPY nginx/default.conf.template /etc/nginx/templates/default.conf.template
+COPY public/ /usr/share/nginx/html/
+
+# 8080 : un utilisateur non-root ne peut pas écouter sur 80
+USER 101:101
+EXPOSE 8080
+
+# Ignoré au format OCI, voir api/Containerfile
+HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
+  CMD ["wget", "-q", "--spider", "http://127.0.0.1:8080/nginx-health"]
