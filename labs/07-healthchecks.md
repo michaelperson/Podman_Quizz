@@ -79,8 +79,8 @@ cause d'un échec dans `podman inspect`.
 ## Palier bonus
 
 - Ajoutez `HEALTHCHECK` au Containerfile de l'API. Construisez avec et sans
-  `--format docker` et comparez `podman inspect --format '{{.Config.Healthcheck}}'`
-  sur les deux images.
+  `--format docker` (deux tags différents), lisez l'avertissement du build et
+  cherchez « Healthcheck » dans `podman image inspect` des deux images.
 - Podman sait **réagir** à un échec : `podman run --health-on-failure=restart`
   (ou `kill`, `stop`). Essayez-le avec le fichier `/tmp/unhealthy`.
 - Pourquoi est-ce une mauvaise idée que la sonde de **vie** (liveness) dépende de
