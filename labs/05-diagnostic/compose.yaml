@@ -1,0 +1,70 @@
+# Lab 05 - Diagnostic : cette stack est VOLONTAIREMENT CASSÉE.
+#
+# Elle doit fournir :
+#   - le quiz sur http://localhost:8080
+#   - l'API, la base et Redis en bonne santé
+#
+# Lancement, depuis ce dossier (labs/05-diagnostic) :
+#   podman compose up -d --build
+#
+# Ne lisez pas ce fichier ligne à ligne pour « trouver l'erreur » : partez des
+# symptômes (podman ps -a, podman logs, podman inspect, curl...). Voir README.md.
+
+name: quiz-diag
+
+services:
+  front:
+    image: docker.io/library/nginx:1.30.7-alpine3.24
+    ports:
+      - "8080:80"
+    environment:
+      API_HOST: api
+      API_PORT: "8000"
+      NGINX_ENTRYPOINT_LOCAL_RESOLVERS: "1"
+    volumes:
+      # Fichiers du front et template nginx montés depuis le dépôt (lecture seule).
+      # :Z = étiquette SELinux privée (utile sous Fedora/RHEL, sans effet ailleurs)
+      - ../../front/public:/usr/share/nginx/html:ro,Z
+      - ../../front/nginx:/etc/nginx/templates:ro,Z
+    depends_on:
+      - api
+
+  api:
+    build:
+      context: ../../api
+      # Chemin relatif au contexte (../../api)
+      dockerfile: ../labs/05-diagnostic/Containerfile.api
+    image: localhost/quiz-api:diag
+    environment:
+      DB_HOST: postgres
+      DB_NAME: quiz
+      DB_USER: quiz
+      # Mot de passe en clair : acceptable pour ce lab jetable uniquement.
+      # La bonne pratique (secret) est l'objet du lab 06.
+      DB_PASSWORD: diagnostic
+      REDIS_HOST: redis
+    depends_on:
+      - db
+      - redis
+
+  db:
+    image: docker.io/library/postgres:18.7-trixie
+    environment:
+      POSTGRES_DB: quiz
+      POSTGRES_USER: quiz
+      POSTGRES_PASSWORD: diagnostic
+    volumes:
+      - diag-pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: docker.io/library/redis:8.10.3-alpine3.23
+    # Persistance du classement sur disque (fichier AOF dans /data)
+    command: ["redis-server", "--appendonly", "yes"]
+    # « En rootless, mon UID sur l'hôte est 1000 : alignons le conteneur dessus. »
+    user: "1000:1000"
+    volumes:
+      - diag-redis:/data
+
+volumes:
+  diag-pgdata:
+  diag-redis:

@@ -1,0 +1,12 @@
+# Image de l'API utilisée par la stack de diagnostic.
+# Ce fichier n'est PAS en panne : inutile de le modifier.
+# (Version simple, le lab 01 montre comment faire mieux.)
+FROM docker.io/library/python:3.14.10-slim-trixie
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY main.py config.py healthcheck.py questions.json ./
+
+EXPOSE 8000
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
