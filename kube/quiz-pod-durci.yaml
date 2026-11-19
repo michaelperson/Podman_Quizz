@@ -1,0 +1,83 @@
+# Solution du palier bonus du lab 04 (2.7) : le même pod, avec
+#  - le mot de passe dans un objet Secret (podman kube play le transforme en
+#    secret Podman) et lu via secretKeyRef ;
+#  - Redis ajouté au pod ;
+#  - des sondes et un securityContext sur l'API.
+#
+# Non testé sous Podman lors de la préparation : à rejouer une fois.
+#
+#   podman kube play kube/quiz-pod-durci.yaml
+#   curl http://localhost:8000/health
+#   podman kube down kube/quiz-pod-durci.yaml
+#
+# Pour la démo seulement : la valeur du Secret est encodée en base64, PAS
+# chiffrée. En vrai, un Secret ne se versionne pas : on le garde dans un
+# fichier séparé, non versionné, passé lui aussi à « podman kube play »
+# (ou à kubectl), ou dans un gestionnaire de secrets.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: quiz-db-password
+type: Opaque
+data:
+  password: Y2hhbmdlLW1vaQ==   # « change-moi » en base64
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: quiz
+  name: quiz
+spec:
+  containers:
+    - name: quiz-db
+      image: docker.io/library/postgres:18.7-trixie
+      env:
+        - name: POSTGRES_DB
+          value: quiz
+        - name: POSTGRES_USER
+          value: quiz
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: quiz-db-password
+              key: password
+      volumeMounts:
+        - mountPath: /var/lib/postgresql
+          name: quiz-pgdata-pvc
+    - name: quiz-redis
+      image: docker.io/library/redis:8.10.3-alpine3.23
+    - name: quiz-api
+      image: localhost/quiz-api:1.0
+      ports:
+        - containerPort: 8000
+          hostPort: 8000
+      env:
+        - name: DB_HOST
+          value: 127.0.0.1
+        - name: REDIS_HOST
+          value: 127.0.0.1
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: quiz-db-password
+              key: password
+      readinessProbe:
+        httpGet:
+          path: /ready
+          port: 8000
+        periodSeconds: 10
+      livenessProbe:
+        exec:
+          command: ["python", "healthcheck.py"]
+        initialDelaySeconds: 20
+        periodSeconds: 10
+      securityContext:
+        runAsNonRoot: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+  volumes:
+    - name: quiz-pgdata-pvc
+      persistentVolumeClaim:
+        claimName: quiz-pgdata

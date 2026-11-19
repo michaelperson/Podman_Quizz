@@ -1,0 +1,60 @@
+# Solution du lab 04, partie 3 (séquence 2.7) : manifeste du pod « quiz ».
+#
+# ATTENTION FORMATEUR : ce fichier a été écrit à la main sur le modèle de la
+# sortie de « podman kube generate quiz » (Podman n'était pas disponible lors de
+# la préparation). Régénérez-le une fois sous Podman 6 pour avoir la sortie exacte :
+#
+#   podman pod create --name quiz -p 8000:8000
+#   podman run -d --pod quiz --name quiz-db -e POSTGRES_DB=quiz -e POSTGRES_USER=quiz \
+#     -e POSTGRES_PASSWORD=change-moi -v quiz-pgdata:/var/lib/postgresql \
+#     docker.io/library/postgres:18.7-trixie
+#   podman run -d --pod quiz --name quiz-api -e DB_HOST=127.0.0.1 \
+#     -e DB_PASSWORD=change-moi localhost/quiz-api:1.0
+#   podman kube generate quiz -f kube/quiz-pod.yaml
+#
+# Points à faire remarquer aux apprenants :
+#  - le mot de passe apparaît EN CLAIR dans les variables (voir quiz-pod-durci.yaml) ;
+#  - le port publié sur le pod devient un hostPort sur le premier conteneur concerné ;
+#  - le volume nommé devient un persistentVolumeClaim du même nom : kube play
+#    réutilise le volume Podman existant (les données sont conservées) ;
+#  - la vraie sortie contient en plus des annotations, la date de création et
+#    souvent toutes les variables héritées de l'image (PATH, LANG, PG_VERSION...).
+#
+# Rejouer :   podman kube play kube/quiz-pod.yaml
+# Arrêter :   podman kube down kube/quiz-pod.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: quiz
+  name: quiz
+spec:
+  containers:
+    - name: quiz-db
+      image: docker.io/library/postgres:18.7-trixie
+      args:
+        - postgres
+      env:
+        - name: POSTGRES_DB
+          value: quiz
+        - name: POSTGRES_USER
+          value: quiz
+        - name: POSTGRES_PASSWORD
+          value: change-moi
+      volumeMounts:
+        - mountPath: /var/lib/postgresql
+          name: quiz-pgdata-pvc
+    - name: quiz-api
+      image: localhost/quiz-api:1.0
+      ports:
+        - containerPort: 8000
+          hostPort: 8000
+      env:
+        - name: DB_HOST
+          value: 127.0.0.1
+        - name: DB_PASSWORD
+          value: change-moi
+  volumes:
+    - name: quiz-pgdata-pvc
+      persistentVolumeClaim:
+        claimName: quiz-pgdata
