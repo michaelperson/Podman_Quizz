@@ -1,0 +1,6 @@
+# Fins de ligne LF partout : les fichiers copiés dans les conteneurs (scripts,
+# configuration nginx, SQL...) doivent rester lisibles sous Linux, même si le
+# dépôt est cloné sous Windows avec core.autocrlf=true.
+* text=auto eol=lf
+*.png binary
+*.ico binary

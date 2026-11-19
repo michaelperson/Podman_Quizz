@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Secrets : ne jamais les versionner
+secrets/*
+!secrets/.gitkeep
+!secrets/README.md
+*.env.local
+
+# Divers
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
