@@ -8,6 +8,13 @@ diagnostiquez et la durcissez.
 La branche `main` est votre point de départ : le code de l'application, sans
 Containerfile ni `compose.yaml`. C'est à vous de les écrire, lab après lab.
 
+> **Vous êtes sur la branche `solutions`.** Elle ajoute les Containerfiles, le
+> `compose.yaml` complet, la correction du diagnostic, les manifestes kube, les
+> unités Quadlet et le workflow CI. Explications pour le formateur :
+> [SOLUTIONS.md](SOLUTIONS.md). Démarrage rapide :
+> `openssl rand -hex 16 > secrets/db_password.txt` puis
+> `podman compose up -d --build`, et <http://localhost:8080>.
+
 ## Architecture
 
 ```
