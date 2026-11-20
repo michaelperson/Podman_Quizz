@@ -12,6 +12,10 @@
 
 name: quiz-diag
 
+# Pas de depends_on : l'API réessaie de joindre la base et nginx résout le nom
+# de l'API à chaque requête. Ainsi chaque service démarre (ou échoue) seul, de
+# la même façon avec docker-compose et podman-compose.
+
 services:
   front:
     image: docker.io/library/nginx:1.30.7-alpine3.24
@@ -26,8 +30,6 @@ services:
       # :Z = étiquette SELinux privée (utile sous Fedora/RHEL, sans effet ailleurs)
       - ../../front/public:/usr/share/nginx/html:ro,Z
       - ../../front/nginx:/etc/nginx/templates:ro,Z
-    depends_on:
-      - api
 
   api:
     build:
@@ -43,9 +45,6 @@ services:
       # La bonne pratique (secret) est l'objet du lab 06.
       DB_PASSWORD: diagnostic
       REDIS_HOST: redis
-    depends_on:
-      - db
-      - redis
 
   db:
     image: docker.io/library/postgres:18.7-trixie

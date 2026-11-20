@@ -51,6 +51,11 @@ l'image n'a pas de healthcheck. Trois solutions :
 
 **Résultat attendu :** `podman ps` affiche `(healthy)` après quelques secondes.
 
+> Podman fait tourner les healthchecks grâce à des minuteries **systemd**. Si le
+> statut reste bloqué sur `(starting)`, votre environnement n'a probablement pas
+> systemd (certaines distributions WSL) : `podman healthcheck run api` lance la
+> vérification à la main. Parlez-en au formateur.
+
 ## Palier standard — dans compose, puis provoquer un échec
 
 1. Ajoutez un `healthcheck:` à chacun des quatre services de votre `compose.yaml` :
