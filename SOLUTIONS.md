@@ -103,12 +103,14 @@ est l'utilisateur lui-même.
   réseau par défaut (`podman`) n'a pas de DNS : d'où l'échec au palier standard.
 - Pod : `podman pod create --name quiz -p 8000:8000`, `--pod quiz`,
   `DB_HOST=127.0.0.1`. Le conteneur `infra` (pause) porte les espaces de noms.
-- Kube : `kube/quiz-pod.yaml` montre la forme attendue. **Il a été écrit à la
-  main** (Podman indisponible lors de la préparation) : régénérez-le une fois
-  sous Podman 6 avec les commandes en tête du fichier et remplacez-le.
+- Kube : `kube/quiz-pod.yaml` est la sortie réelle de `podman kube generate`
+  (Podman 6.2.0 rootless), rejouée avec succès par `podman kube play`.
+  À commenter : mot de passe en clair, `hostPort` posé sur le premier conteneur
+  (`quiz-db`), `HEALTHCHECK` de l'image (construite en `--format docker`)
+  traduit en `livenessProbe`, volume nommé devenu PVC.
 - `kube/quiz-pod-durci.yaml` (bonus) : `Secret` + `secretKeyRef`, Redis dans le
-  pod, sondes, `securityContext`. **Non testé** : à rejouer avec
-  `podman kube play` avant la session.
+  pod, sondes, `securityContext`. Rejoué avec `podman kube play` : le Secret
+  devient un secret Podman (`podman secret ls`), `/health` vert avec Redis.
 
 ## Lab 05 — Diagnostic (2.8) : les 4 pannes
 
@@ -123,8 +125,18 @@ Corrigé commenté : `labs/05-diagnostic/compose.corrige.yaml`.
 | 4 | redis | permissions / UID rootless | `user: "1000:1000"` (« pour coller à mon UID hôte ») + volume `/data` + `--appendonly yes` | `redis` en `Exited (1)` : `Can't open or create append-only dir appendonlydir: Permission denied` | supprimer `user:` (l'image tourne déjà en utilisateur `redis`, UID 999) |
 
 Les pannes sont **indépendantes** : chacune touche un service différent, a son
-propre symptôme dès le lancement et se corrige sans toucher aux autres. Les quatre ont été reproduites avec Docker 29
-(voir « Tests » plus bas), puis la stack corrigée a été vérifiée.
+propre symptôme dès le lancement et se corrige sans toucher aux autres. Les
+quatre ont été reproduites avec docker compose **et** avec podman-compose 1.6
+sous Podman 6.2 rootless, puis la stack corrigée a été vérifiée avec les deux.
+
+Pourquoi la stack de diagnostic n'a **aucun `depends_on`** : avec podman-compose
+1.6, un `depends_on` simple fait attendre que la dépendance soit `running`
+(`podman wait --condition=running`). Si elle s'arrête (pannes 3 et 4),
+`podman compose up -d` reste bloqué indéfiniment et l'API et le front ne sont
+jamais démarrés : les pannes 1 et 2 seraient masquées. Sans `depends_on`, l'API
+se débrouille (nouvelles tentatives) et nginx aussi (résolution à la requête).
+C'est d'ailleurs une bonne question de débriefing : « démarré » n'est pas
+« prêt », et les deux fournisseurs compose ne se comportent pas pareil.
 
 Méthode à faire verbaliser : `podman ps -a` (qui est arrêté, avec quel code),
 `podman logs`, `podman inspect` (env, montages, utilisateur), `podman port`,
@@ -166,10 +178,12 @@ non-root (PID dans `/tmp`, `chown` de `/var/cache/nginx` et `/etc/nginx/conf.d`,
 Dès que `nginx-unprivileged:1.30.7` existe, on peut y revenir.
 
 Fournisseur compose : `podman compose` délègue à `docker-compose` ou à
-`podman-compose`. **Tests faits avec docker compose uniquement** : à rejouer
-avec le fournisseur choisi pour la salle (support de
-`depends_on.condition: service_healthy`, `secrets: file:`, `read_only`,
-`tmpfs`, `cap_drop` par podman-compose à vérifier).
+`podman-compose`. `compose.yaml` a été testé avec les deux (docker compose v2
+sous Docker 29 ; podman-compose 1.6.0 sous Podman 6.2 rootless) : secrets
+`file:`, `depends_on.condition: service_healthy`, `read_only`, `tmpfs`,
+`cap_drop`, `security_opt` fonctionnent. Avec podman-compose, `up -d` attend
+que chaque dépendance soit `healthy` : **sans systemd, les healthchecks ne
+tournent pas et `up` reste bloqué** (voir lab 07).
 
 ## Lab 07 — Healthchecks (3.3)
 
@@ -186,8 +200,14 @@ avec le fournisseur choisi pour la salle (support de
   `podman inspect` → `State.Health.Log` affiche
   `healthcheck /health en échec : HTTP Error 503`.
 - Sous Podman, les healthchecks sont exécutés par des timers **systemd**
-  transitoires. Sans systemd (certains environnements WSL), le statut reste
-  `starting` : `podman healthcheck run <conteneur>` permet de vérifier à la main.
+  transitoires. Sans systemd, le statut reste `starting` pour toujours
+  (constaté dans l'environnement de test) : `podman healthcheck run <conteneur>`
+  les déclenche à la main. La podman machine (Windows, macOS) et les Linux de
+  bureau ont systemd ; une distribution WSL personnelle peut ne pas l'avoir.
+- Vérifié sous Podman 6.2 : au format OCI, `podman build` affiche
+  `HEALTHCHECK is not supported for OCI image format and will be ignored. Must use docker format`
+  et `podman image inspect --format '{{.HealthCheck}}'` renvoie `<nil>` ; avec
+  `--format docker`, le healthcheck est bien dans l'image.
 - `--health-on-failure=restart|kill|stop` est propre à Podman : bonne démo.
 - Piège Git Bash : `/tmp/unhealthy` réécrit en chemin Windows
   (`MSYS_NO_PATHCONV=1`).
@@ -240,10 +260,12 @@ systemctl --user start quiz-pod.service
 curl http://localhost:8080/api/leaderboard
 ```
 
-**Non testé** (pas de Podman ni de systemd lors de la préparation). À vérifier :
-le nom d'unité du pod (`quiz-pod.service`), le démarrage des conteneurs avec le
-pod, `Notify=healthy`, le montage du secret dans `/run/secrets/quiz-db-password`.
-`/usr/libexec/podman/quadlet -dryrun -user` montre les unités générées.
+Vérifié : `/usr/libexec/podman/quadlet -dryrun -user` (Podman 6.2) génère sans
+erreur les unités `quiz-pod`, `quiz-db-volume`, `quiz-db`, `quiz-redis`,
+`quiz-api`, `quiz-front` et, pour la variante, `quiz` (`podman kube play`).
+**Non exécuté** sous systemd (pas de systemd dans l'environnement de test) : le
+démarrage réel, `Notify=healthy` et l'ordre de démarrage restent à vérifier une
+fois sur un Linux ou dans `podman machine ssh`.
 
 ## Bonus CI
 
@@ -259,47 +281,58 @@ et pousser. Les paquets ghcr.io sont privés par défaut.
 
 ---
 
-## Tests effectués pendant la préparation (Docker 29, Windows 11)
+## Tests effectués pendant la préparation
 
-Podman n'était pas disponible : tout a été testé avec **Docker 29.8 et docker
-compose**, sans aucune fonctionnalité propre à Docker (pas de port < 1024, images
-nommées en entier, nginx sur 8080).
+Deux environnements, sur Windows 11 :
+
+- **Docker 29.8 et docker compose v2** (pas de fonctionnalité propre à Docker :
+  aucun port < 1024, images nommées en entier, nginx sur 8080) ;
+- **Podman 6.2.0 rootless** (`quay.io/podman/stable:v6.2.0`, lancé dans un
+  conteneur Docker privilégié, utilisateur `podman`) avec **podman-compose 1.6.0**.
+  Limites de cet environnement : pas de systemd (healthchecks déclenchés à la
+  main par une boucle `podman healthcheck run`), journaux `journald` vides,
+  `podman top` indisponible, `ip_unprivileged_port_start=0` (le refus du port 80
+  en rootless ne peut pas y être observé).
 
 Vérifié :
 
-- build des 4 images (`docker build -f ...`) ;
-- `compose.yaml` : les 4 services `healthy`, quiz jouable via nginx, scores
-  enregistrés, classement Redis correct (meilleur score par joueur conservé),
-  validation (pseudo vide → 422) ;
+- build des 4 images (Docker et Podman ; avertissement `HEALTHCHECK` au format
+  OCI constaté sous Podman) ;
+- `compose.yaml` (docker compose et podman-compose) : les 4 services `healthy`,
+  quiz jouable via nginx, scores enregistrés, classement Redis correct (meilleur
+  score par joueur conservé), validation (pseudo vide → 422) ;
 - persistance après `down`/`up` et reconstruction du classement Redis ;
-- `FORCE_UNHEALTHY=1` et `/tmp/unhealthy` → `unhealthy`, retour au vert ;
-- nginx suit l'API recréée (résolution DNS dynamique) ;
+- `FORCE_UNHEALTHY=1` et `/tmp/unhealthy` → `unhealthy`, retour au vert
+  (Docker et Podman) ;
+- nginx suit l'API recréée (résolution DNS dynamique) ; sous Podman,
+  `NGINX_LOCAL_RESOLVERS` vaut bien l'adresse d'aardvark-dns (10.89.0.1) ;
 - API sans Redis (`REDIS_HOST` vide) → classement depuis PostgreSQL ;
-- front sans Containerfile (bind mounts, commande du README) ;
-- secret absent de `docker inspect` ; API en UID 10001, front en UID 101 ;
-- stack de diagnostic : les 4 symptômes reproduits, puis la stack corrigée
-  fonctionne ;
-- scans Trivy 0.76.2 (images et `trivy config`), y compris la méthode par archive
-  avec le digest épinglé.
+- front sans Containerfile (bind mounts, commande du README, sous Docker) ;
+- secret absent de `inspect` (Docker et Podman) ; API en UID 10001, front en
+  UID 101 ; API durcie (`read_only`, `cap_drop`) fonctionnelle ;
+- stack de diagnostic : les 4 symptômes reproduits avec les deux fournisseurs
+  (sous Podman rootless, le volume Redis appartient bien à l'UID 999 et l'UID
+  1000 reçoit `Permission denied`), puis la stack corrigée fonctionne ;
+- pod, `podman kube generate`, `kube play` / `kube down` des deux manifestes ;
+- `quadlet -dryrun` sur toutes les unités ;
+- scans Trivy 0.76.2 (images et `trivy config`), y compris la méthode par
+  archive avec le digest épinglé ;
+- un clone neuf de la branche `solutions` (fins de ligne LF, secret ignoré par
+  git) démarre du premier coup.
 
-**Non vérifié — à faire sous Podman avant la première session :**
+**Non vérifié — à faire avant la première session :**
 
-1. Tous les labs avec Podman 6 rootless, sous Windows (WSL), macOS et Linux.
-2. `podman compose` avec le fournisseur retenu (podman-compose ou docker-compose) :
-   `secrets: file:`, `depends_on: condition: service_healthy`, `read_only`,
-   `cap_drop`, `tmpfs`, et le chemin `dockerfile: ../labs/05-diagnostic/Containerfile.api`
-   (relatif au contexte) de la stack de diagnostic.
+1. Les labs sur les postes réels : podman machine sous Windows (WSL) et macOS,
+   Podman natif sous Linux (avec systemd, SELinux pour `:Z`).
+2. Le fournisseur `podman compose` réellement installé en salle (docker-compose
+   via Podman Desktop, ou podman-compose) : relancer `compose.yaml` et la stack
+   de diagnostic.
 3. Les bind mounts relatifs (`-v ./api:/app:Z`) depuis PowerShell avec la
    podman machine.
-4. La panne 4 sous Podman rootless : le volume nommé doit bien hériter du
-   propriétaire de `/data` de l'image (copie à l'initialisation), sinon le
-   symptôme diffère.
-5. `NGINX_ENTRYPOINT_LOCAL_RESOLVERS` avec aardvark-dns (réseau compose) et dans
-   un pod (Quadlet : API sur `127.0.0.1`).
-6. Régénérer `kube/quiz-pod.yaml` avec `podman kube generate`, rejouer
-   `kube/quiz-pod-durci.yaml`.
-7. Les unités Quadlet et le workflow GitHub Actions (jamais exécutés).
-8. L'avertissement de `podman build` sur `HEALTHCHECK` au format OCI et
-   la différence avec `--format docker`.
-9. Les durées de démarrage : avec la panne 2, l'API abandonne après 15 tentatives
-   (environ 2 minutes, la résolution DNS ajoutant son délai à chaque essai).
+4. Le refus de `-p 80:8080` en rootless (évoqué au lab 04 et au quiz) : vrai
+   sous Linux, à vérifier dans la podman machine.
+5. Les unités Quadlet démarrées par systemd (seule la génération a été testée).
+6. Le workflow GitHub Actions (jamais exécuté) ; actionlint non lancé.
+7. Le registre local (lab 02), `--tls-verify=false`, et le port 5000 sous macOS.
+8. Les durées : avec la panne 2, l'API abandonne après 15 tentatives (environ
+   2 minutes, la résolution DNS ajoutant son délai à chaque essai).
