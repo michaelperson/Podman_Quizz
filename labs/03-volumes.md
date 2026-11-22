@@ -69,10 +69,13 @@ et `podman volume inspect quiz-pgdata` montrent le volume et son emplacement.
    ```bash
    podman exec db ls -ln /var/lib/postgresql/18/docker | head
    podman unshare ls -ln "$(podman volume inspect --format '{{.Mountpoint}}' quiz-pgdata)/18/docker" | head
-   ls -ln "$(podman volume inspect --format '{{.Mountpoint}}' quiz-pgdata)" 
+   ls -ln "$(podman volume inspect --format '{{.Mountpoint}}' quiz-pgdata)/18"
    ```
 
    (sous Windows et macOS, lancez ces commandes dans `podman machine ssh`).
+   La dernière commande montre le dossier `docker` : c'est lui qui appartient à
+   l'utilisateur `postgres`. Le dossier `18`, au-dessus, est créé par le root du
+   conteneur : sur l'hôte, il appartient donc à... vous.
    Expliquez les trois résultats : UID dans le conteneur, UID dans l'espace de
    noms utilisateur, UID réel sur l'hôte (`cat /etc/subuid`).
 
@@ -84,6 +87,15 @@ et `podman volume inspect quiz-pgdata` montrent le volume et son emplacement.
 1. Remplacez le volume nommé par un dossier de votre choix sur l'hôte
    (`-v ./pgdata:/var/lib/postgresql:Z`). Que contient ce dossier vu depuis l'hôte ?
    Pouvez-vous le supprimer avec `rm -rf` sans `podman unshare` ?
+
+   > **Windows et macOS :** le dossier doit exister avant le `podman run`
+   > (Podman ne le crée pas). Et un dossier de **Windows** ne convient pas à
+   > PostgreSQL : il refuse de démarrer (`chmod ... Operation not permitted`),
+   > car ce système de fichiers ne gère pas les droits Unix. Prenez un dossier
+   > **de la machine** : `podman machine ssh mkdir -p pgdata`, puis
+   > `-v /home/<utilisateur>/pgdata:/var/lib/postgresql:Z` (nom d'utilisateur :
+   > `podman machine ssh whoami`). Les commandes `ls`, `rm` et `podman unshare`
+   > se lancent alors dans `podman machine ssh`.
 2. Sous Fedora ou RHEL (SELinux) : essayez sans `:Z`. Quel message obtenez-vous ?
    Quelle est la différence entre `:z` et `:Z` ?
 3. Lancez `podman run --rm --userns=keep-id -v ./front:/data:Z docker.io/library/python:3.14.10-slim-trixie ls -ln /data`

@@ -67,7 +67,8 @@ savez dire pourquoi elle est fréquente « dans la vraie vie ».
 
 ### Bonus
 
-- L'une des pannes ne se manifeste qu'au bout d'une minute ou deux. Laquelle,
+- L'une des pannes ne se manifeste qu'au bout d'une trentaine de secondes
+  (parfois plus, selon le poste). Laquelle,
   et pourquoi ? Comment rendre la stack plus parlante (indice : `healthcheck`
   et `depends_on: condition: service_healthy`, voir lab 06) ?
 - Proposez une cinquième panne réaliste et faites-la trouver à votre voisin.

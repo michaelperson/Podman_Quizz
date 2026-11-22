@@ -74,8 +74,15 @@ Nettoyage avant la partie 2 : `podman rm -f api db redis front`
 1. Créez un pod. Les ports se publient **sur le pod**, pas sur les conteneurs :
 
    ```bash
-   podman pod create --name quiz -p 8000:8000
+   podman pod create --name quiz --network bridge -p 8000:8000
    ```
+
+   > Pourquoi `--network bridge` ? Sans lui, un pod rootless utilise le réseau
+   > « pasta ». Avec la podman machine (Windows, macOS), `localhost` désigne
+   > d'abord l'adresse IPv6 `::1`, que pasta accepte sans la transmettre au pod :
+   > `curl http://localhost:8000` ne répond pas, alors que `127.0.0.1:8000`
+   > fonctionne. Sur le réseau `bridge` (celui de `kube play` et de compose),
+   > les deux fonctionnent.
 
 2. Lancez la base et l'API dans le pod :
 

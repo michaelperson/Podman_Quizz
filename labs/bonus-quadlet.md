@@ -44,7 +44,9 @@ section `[Service]` ?
 
 ## Palier standard — l'application dans un pod
 
-1. Un fichier `quiz.pod` qui publie le port 8080.
+1. Un fichier `quiz.pod` qui publie le port 8080, sur le réseau bridge par
+   défaut (`Network=podman`) : sans cela, `localhost:8080` ne répond pas depuis
+   Windows ou macOS (voir l'encadré du lab 04).
 2. Un `.volume` pour la base, un `.container` par service (`db`, `redis`, `api`,
    `front`) avec `Pod=quiz.pod`. Dans un pod, l'API joint la base sur `127.0.0.1`.
 3. Le mot de passe dans un secret Podman, pas dans le fichier :
