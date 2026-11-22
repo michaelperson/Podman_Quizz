@@ -203,6 +203,14 @@ contre les versions piégées fraîchement publiées).
 - Avec **Git Bash**, les chemins commençant par `/` sont réécrits en chemins Windows :
   `podman exec api touch /tmp/unhealthy` devient `.../AppData/Local/Temp/unhealthy`.
   Préfixez la commande avec `MSYS_NO_PATHCONV=1`, ou utilisez PowerShell ou WSL.
+- Dans **Windows PowerShell 5.1**, `curl` est un alias d'`Invoke-WebRequest` :
+  tapez `curl.exe`. PowerShell 7 n'a plus cet alias.
+- **Docker Desktop** lancé à côté de Podman peut déjà occuper les ports des labs
+  (8000, 8080, 5432...) : `address already in use`. Arrêtez les conteneurs Docker
+  concernés, ou changez le port publié.
+- Installez Podman **pour Windows** (`winget install Podman.CLI`) et pilotez-le
+  depuis PowerShell. N'installez pas Podman avec `apt` dans une distribution WSL :
+  la version y est beaucoup trop ancienne.
 
 ## Licence
 

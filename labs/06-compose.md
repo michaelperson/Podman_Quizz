@@ -58,6 +58,12 @@ les scores sont toujours là.
    - PostgreSQL lit `POSTGRES_PASSWORD_FILE`, l'API lit `DB_PASSWORD_FILE`. Où le
      secret est-il monté dans le conteneur ?
    - vérifiez : `podman inspect` de l'API ne doit montrer aucun mot de passe.
+
+   > **Si `podman compose up -d` ne rend jamais la main**, vérifiez que le
+   > fichier du secret existe bien. Avec podman-compose, un conteneur qui n'a
+   > pas pu être créé (fichier de secret absent, par exemple) n'arrête pas la
+   > commande : elle attend indéfiniment qu'il devienne « healthy ». Ctrl+C,
+   > puis cherchez la première erreur (`podman-compose --verbose up -d`).
 3. **Dépendances** : `depends_on` pour que la base et Redis démarrent avant
    l'API, et l'API avant le front. Est-ce que « démarré » veut dire « prêt » ?
    (Le lab 07 complétera avec des healthchecks et `condition: service_healthy`.)
