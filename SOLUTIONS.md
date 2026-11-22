@@ -101,8 +101,11 @@ est l'utilisateur lui-même.
 
 - Réseau : `podman network create quiz`, `--network quiz`, `DB_HOST=db`. Le
   réseau par défaut (`podman`) n'a pas de DNS : d'où l'échec au palier standard.
-- Pod : `podman pod create --name quiz -p 8000:8000`, `--pod quiz`,
+- Pod : `podman pod create --name quiz --network bridge -p 8000:8000`, `--pod quiz`,
   `DB_HOST=127.0.0.1`. Le conteneur `infra` (pause) porte les espaces de noms.
+  Sans `--network bridge`, le pod rootless passe par pasta : depuis Windows
+  (podman machine WSL), `localhost:8000` ne répond pas (IPv6 `::1` accepté par
+  pasta mais non transmis), `127.0.0.1:8000` oui. Vérifié le 2026-11-22.
 - Kube : `kube/quiz-pod.yaml` est la sortie réelle de `podman kube generate`
   (Podman 6.2.0 rootless), rejouée avec succès par `podman kube play`.
   À commenter : mot de passe en clair, `hostPort` posé sur le premier conteneur
@@ -120,7 +123,7 @@ Corrigé commenté : `labs/05-diagnostic/compose.corrige.yaml`.
 | # | Service | Type | Ce qui est semé | Symptôme | Correction |
 |---|---|---|---|---|---|
 | 1 | front | port | `ports: "8080:80"` | conteneur `Up`, mais `curl localhost:8080` : réponse vide / connexion réinitialisée (nginx écoute sur 8080, rien sur 80) | `"8080:8080"` |
-| 2 | api | DNS / nom de service | `DB_HOST: postgres` alors que le service s'appelle `db` | l'API reste `Up` 1 à 2 minutes en journalisant `failed to resolve host 'postgres'`, puis s'arrête (`Exited (1)`, « Abandon : impossible de joindre PostgreSQL ») | `DB_HOST: db` |
+| 2 | api | DNS / nom de service | `DB_HOST: postgres` alors que le service s'appelle `db` | l'API reste `Up` en journalisant `failed to resolve host 'postgres'` (15 tentatives), puis s'arrête : « Abandon : impossible de joindre PostgreSQL », `Exited (3)` (code d'échec de démarrage d'uvicorn). Durée : ~30 s sur la podman machine Windows (la résolution échoue tout de suite), jusqu'à 2 min là où le DNS met du temps à répondre | `DB_HOST: db` |
 | 3 | db | volume | volume monté sur `/var/lib/postgresql/data` avec PostgreSQL 18 | `db` en `Exited (1)` immédiatement ; le journal explique le nouveau chemin | monter sur `/var/lib/postgresql` |
 | 4 | redis | permissions / UID rootless | `user: "1000:1000"` (« pour coller à mon UID hôte ») + volume `/data` + `--appendonly yes` | `redis` en `Exited (1)` : `Can't open or create append-only dir appendonlydir: Permission denied` | supprimer `user:` (l'image tourne déjà en utilisateur `redis`, UID 999) |
 
@@ -151,8 +154,9 @@ vraiment ses UID hôte dans un bind mount, est `--userns=keep-id` (compose :
 
 Variante rootless à évoquer à l'oral (non semée, car elle ne se reproduit pas
 partout) : publier `80:8080` échoue en rootless sous Linux
-(`net.ipv4.ip_unprivileged_port_start=1024`). Selon la configuration de la
-podman machine (Windows, macOS), ce n'est pas forcément le cas.
+(`net.ipv4.ip_unprivileged_port_start=1024`). Vérifié aussi dans la podman
+machine Windows (WSL, Fedora 44) le 2026-11-22 : `pasta failed ... Listen failed
+for HOST TCP port 0.0.0.0/80: Permission denied`. macOS : à vérifier.
 
 ## Lab 06 — Compose (2.10)
 
@@ -183,7 +187,23 @@ sous Docker 29 ; podman-compose 1.6.0 sous Podman 6.2 rootless) : secrets
 `file:`, `depends_on.condition: service_healthy`, `read_only`, `tmpfs`,
 `cap_drop`, `security_opt` fonctionnent. Avec podman-compose, `up -d` attend
 que chaque dépendance soit `healthy` : **sans systemd, les healthchecks ne
-tournent pas et `up` reste bloqué** (voir lab 07).
+tournent pas et `up` reste bloqué** (voir lab 07). Dans la podman machine
+Windows (systemd présent), `up -d` rend la main en ~27 s, les 4 services
+`healthy` (vérifié le 2026-11-22 avec podman-compose 1.6.0).
+
+Autre blocage podman-compose constaté : si le fichier du secret n'existe pas,
+la création de `db` échoue (`statfs .../secrets/db_password.txt: no such file
+or directory`) mais la commande continue et boucle à l'infini sur
+`podman wait --condition=healthy` d'un conteneur inexistant. docker-compose,
+lui, s'arrête avec une erreur. Réflexe : vérifier le fichier, puis
+`podman-compose --verbose up -d`.
+
+Créer le secret sous PowerShell : `Set-Content -Path secrets/db_password.txt
+-Value '...' -NoNewline`. **Jamais** la forme positionnelle
+`Set-Content -NoNewline secrets/db_password.txt '...'` : sous PowerShell 7 elle
+crée un fichier **nommé d'après le mot de passe**, à la racine du dépôt.
+PostgreSQL et l'API tolèrent un secret terminé par CRLF (vérifié) ; MongoDB non
+(cas final).
 
 ## Lab 07 — Healthchecks (3.3)
 
@@ -263,9 +283,13 @@ curl http://localhost:8080/api/leaderboard
 Vérifié : `/usr/libexec/podman/quadlet -dryrun -user` (Podman 6.2) génère sans
 erreur les unités `quiz-pod`, `quiz-db-volume`, `quiz-db`, `quiz-redis`,
 `quiz-api`, `quiz-front` et, pour la variante, `quiz` (`podman kube play`).
-**Non exécuté** sous systemd (pas de systemd dans l'environnement de test) : le
-démarrage réel, `Notify=healthy` et l'ordre de démarrage restent à vérifier une
-fois sur un Linux ou dans `podman machine ssh`.
+Exécuté sous systemd dans la podman machine Windows le 2026-11-22 : démarrage
+du pod et des 4 services en ~18 s, tous `healthy` (`Notify=healthy` et l'ordre
+respectés), `Restart=always` relance la base après un `podman stop`. Sans
+`Network=podman` dans `quiz.pod`, `localhost:8080` ne répondait pas depuis
+Windows (pasta et IPv6, voir lab 04) : la ligne est ajoutée. La variante
+`quiz.kube` démarre aussi (`hostPort` 8000 du manifeste : port à libérer sur
+l'hôte).
 
 ## Bonus CI
 
@@ -320,19 +344,36 @@ Vérifié :
 - un clone neuf de la branche `solutions` (fins de ligne LF, secret ignoré par
   git) démarre du premier coup.
 
+### Poste Windows réel — 2026-11-22
+
+Windows 11, **Podman 6.2.0** (`winget install Podman.CLI`), podman machine WSL
+(Fedora 44, rootless, systemd `running`), **podman-compose 1.6.0**, PowerShell 7.6.
+Tous les labs (01 à 08), les bonus Quadlet et le cas final déroulés depuis
+la branche `solutions` :
+
+- builds (1,2 Go / 183 Mo / 99 Mo), `podman top`, bind mount relatif
+  `-v ./api:/app:Z` depuis PowerShell ;
+- registre local, `--tls-verify=false`, `registries.conf` dans la machine ;
+- volumes et UID (525286 = 524288 + 999 − 1), `--userns=keep-id` ;
+- réseau, DNS, Redis, pod (`--network bridge`), kube generate / play / down ;
+- stack de diagnostic : 4 symptômes, puis stack corrigée ;
+- `compose.yaml` : `up -d` en 27 s, healthchecks **automatiques** (systemd) ;
+- lab 07 complet, piège Git Bash confirmé ;
+- Trivy par digest depuis PowerShell : premier scan **3 min 30** (téléchargement
+  de la base), socle 16 CRITICAL / 528 HIGH (base du 2026-11-22) ;
+- Quadlet sous systemd (voir plus haut) ; port 80 refusé en rootless.
+
+Écarts trouvés et corrigés dans les énoncés : commande d'UID du lab 03, bind
+mount PostgreSQL sur un dossier Windows (refusé : `chmod ... Operation not
+permitted`, utiliser un dossier de la machine), pod et `localhost` (lab 04,
+`quiz.pod`), durée de la panne 2, blocage de podman-compose sans fichier
+secret (lab 06). Constat poste : Docker Desktop lancé à côté occupait les
+ports 8000 et 5432.
+
 **Non vérifié — à faire avant la première session :**
 
-1. Les labs sur les postes réels : podman machine sous Windows (WSL) et macOS,
-   Podman natif sous Linux (avec systemd, SELinux pour `:Z`).
-2. Le fournisseur `podman compose` réellement installé en salle (docker-compose
-   via Podman Desktop, ou podman-compose) : relancer `compose.yaml` et la stack
-   de diagnostic.
-3. Les bind mounts relatifs (`-v ./api:/app:Z`) depuis PowerShell avec la
-   podman machine.
-4. Le refus de `-p 80:8080` en rootless (évoqué au lab 04 et au quiz) : vrai
-   sous Linux, à vérifier dans la podman machine.
-5. Les unités Quadlet démarrées par systemd (seule la génération a été testée).
-6. Le workflow GitHub Actions (jamais exécuté) ; actionlint non lancé.
-7. Le registre local (lab 02), `--tls-verify=false`, et le port 5000 sous macOS.
-8. Les durées : avec la panne 2, l'API abandonne après 15 tentatives (environ
-   2 minutes, la résolution DNS ajoutant son délai à chaque essai).
+1. macOS (podman machine) et Linux natif avec SELinux (`:Z`).
+2. Le fournisseur compose retenu pour la salle, s'il diffère de podman-compose
+   (docker-compose via Podman Desktop).
+3. Le workflow GitHub Actions (jamais exécuté) ; actionlint non lancé.
+4. Le port 5000 sous macOS (AirPlay).

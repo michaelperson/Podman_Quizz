@@ -7,6 +7,9 @@ Description=Quiz conteneurs - pod
 [Pod]
 PodName=quiz
 PublishPort=8080:8080
+# Réseau bridge par défaut : sans lui, le pod passe par pasta et localhost:8080
+# (IPv6 ::1) ne répond pas depuis Windows ou macOS ; 127.0.0.1 seulement.
+Network=podman
 
 [Install]
 WantedBy=default.target
